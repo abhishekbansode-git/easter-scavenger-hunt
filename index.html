@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Easter Scavenger Hunt Generator</title>
+  <!-- Preload Critical Local Fonts -->
+  <link rel="preload" href="assets/fonts/Baskerville-Bold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/Baskerville-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/OPTIFranklinGothic-Medium.otf" as="font" type="font/otf" crossorigin>
+  <link rel="preload" href="assets/fonts/Candy Christmas.otf" as="font" type="font/otf" crossorigin>
+  <!-- Google Fonts: Roboto & Nunito -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baskervville:ital@0;1&family=Great+Vibes&family=Nunito:wght@400;600;700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- MAIN MENU LANDING PAGE -->
+  <div id="main-menu-page" class="main-menu-page">
+    <div class="main-menu-container">
+
+      <div id="main-menu-content" class="main-menu-content">
+        <!-- Hero Branding -->
+        <div class="main-menu-hero">
+          <h1 class="menu-hero-title">Easter Hunt <span class="brand-title-accent">Creator</span></h1>
+        </div>
+
+        <!-- 3 Steps Flow with connecting arrows -->
+        <div class="main-steps-flow">
+          <!-- Step 1 -->
+          <div class="main-step-item">
+            <div class="main-step-badge">1</div>
+            <div class="main-step-title">Select Hiding Spots</div>
+            <p class="main-step-desc">Add, edit, reorder or remove any hiding spot</p>
+          </div>
+
+          <!-- Connecting Arrow 1 -> 2 -->
+          <div class="main-step-arrow" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="main-step-item">
+            <div class="main-step-badge">2</div>
+            <div class="main-step-title">Choose a Design</div>
+            <p class="main-step-desc">Pick a theme and preview your cards &amp; answer key live</p>
+          </div>
+
+          <!-- Connecting Arrow 2 -> 3 -->
+          <div class="main-step-arrow" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="main-step-item">
+            <div class="main-step-badge">3</div>
+            <div class="main-step-title">Download</div>
+            <p class="main-step-desc">Download printable clue cards and answers (1 or 2 per page)</p>
+          </div>
+        </div>
+
+        <!-- Action Buttons: Tutorial & Start -->
+        <div class="main-menu-actions">
+          <a href="https://www.youtube.com" target="_blank" rel="noopener noreferrer" class="menu-action-btn menu-action-tutorial">
+            <div class="menu-action-icon-box" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); color: #dc2626;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5,3 19,12 5,21"/>
+              </svg>
+            </div>
+            <div class="menu-action-text">
+              <span class="menu-action-title">Watch Tutorial</span>
+            </div>
+            <div class="menu-action-arrow tutorial-arrow">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </div>
+          </a>
+
+          <button type="button" class="menu-action-btn menu-action-start" onclick="startHuntCreator()">
+            <div class="menu-action-icon-box" style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); color: #ffffff;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </div>
+            <div class="menu-action-text">
+              <span class="menu-action-title" style="color: #7c3aed; font-size: 1.25rem;">Start</span>
+            </div>
+            <div class="menu-action-arrow start-arrow">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </div>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+  <div class="app-layout" id="app-layout" style="display: none;">
+    <!-- Left Sidebar -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-brand" onclick="returnToMainMenu()" style="cursor: pointer;" title="Back to Main Menu">
+        <div class="brand-badge-icon">🐰</div>
+        <div class="brand-info">
+          <h1 class="brand-title"><strong>Easter Hunt <span class="brand-title-accent">Creator</span></strong></h1>
+        </div>
+      </div>
+
+      <!-- Sidebar Stepper Navigation -->
+      <nav class="sidebar-stepper" aria-label="Creation Steps">
+        <div class="sidebar-section-title">Build your own hunt</div>
+        <div class="step-item active" id="step-nav-1">
+          <span class="step-circle">1</span>
+          <div class="step-info">
+            <span class="step-name">Select Hiding Spots</span>
+          </div>
+        </div>
+        <div class="step-item" id="step-nav-2">
+          <span class="step-circle">2</span>
+          <div class="step-info">
+            <span class="step-name">Choose a Design</span>
+          </div>
+        </div>
+        <div class="step-item" id="step-nav-3">
+          <span class="step-circle">3</span>
+          <div class="step-info">
+            <span class="step-name">Download</span>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button type="button" class="sidebar-menu-btn" id="btn-sidebar-menu" onclick="returnToMainMenu()" title="Back to Main Menu">
+          <span class="menu-circle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </span>
+          <div class="menu-info">
+            <span class="menu-name">Main Menu</span>
+          </div>
+        </button>
+
+        <a href="https://www.youtube.com" target="_blank" rel="noopener noreferrer" class="sidebar-tutorial-btn" id="btn-youtube-tutorial" title="Watch Video Tutorial">
+          <span class="tutorial-circle">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="#ffffff" style="margin-left: 2px;">
+              <polygon points="5,3 19,12 5,21"/>
+            </svg>
+          </span>
+          <div class="tutorial-info">
+            <span class="tutorial-name"><span class="tutorial-desktop-prefix">Watch </span>Tutorial</span>
+          </div>
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="app-main">
+
+    <!-- STEP 1: SELECT HIDING SPOTS -->
+    <main class="step-panel" id="panel-step-1">
+      <div class="step1-top-bar">
+        <div class="step1-header-left">
+          <div class="step1-title-row">
+            <h2><span class="panel-step-label">Step 1:</span> Select Hiding Spots</h2>
+            <div class="step1-header-actions" style="display: flex; align-items: center; gap: 8px;">
+              <button type="button" class="btn-text-action step1-clear-btn" onclick="clearAllSpots()" title="Clear all locations to start blank">
+                🗑️ Clear All
+              </button>
+              <button type="button" class="btn-text-action step1-reset-btn" onclick="resetDefaultSpots()" title="Restore default locations">
+                🔄 Reset to Default
+              </button>
+            </div>
+          </div>
+          <p class="panel-subtitle" style="margin: 2px 0 0; text-align: left;">Edit, reorder or remove any hiding spot</p>
+        </div>
+
+        <button type="button" class="btn-primary step1-top-next-btn" onclick="proceedToStep2()">
+          <span>Next: Choose a Design</span>
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="step1-spots-wrapper">
+        <div class="spots-scroll-viewport" id="spots-scroll-viewport">
+          <div class="spots-list" id="spots-list"></div>
+        </div>
+      </div>
+
+      <div class="step1-bottom-actions">
+        <button type="button" class="btn-primary step1-bottom-next-btn" onclick="proceedToStep2()">
+          <span>Next: Choose a Design</span>
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="mapping-toast" class="mapping-toast" style="display:none;" role="alert">
+        <span class="mapping-toast-icon">💡</span>
+        <span id="mapping-toast-text" class="mapping-toast-text"></span>
+        <button type="button" class="mapping-toast-close" onclick="hideMappingToast()" aria-label="Close notification">✕</button>
+      </div>
+    </main>
+
+    <!-- STEP 2: CHOOSE A DESIGN -->
+    <main class="step-panel" id="panel-step-2" style="display:none;">
+      <div class="step3-workspace-split">
+        <!-- Control Column (Left) -->
+        <div class="step3-control-column">
+          <div class="step2-panel-header">
+            <h2><span class="panel-step-label">Step 2:</span> Choose a Design</h2>
+          </div>
+
+          <!-- 1. Card Design Selector -->
+          <div class="step3-deck-card" id="step3-theme-card">
+            <div class="deck-card-header">
+              <span class="deck-tag">Design</span>
+            </div>
+
+            <div class="step3-theme-grid">
+              <button type="button" class="step3-theme-btn active" id="step3-theme-chip-1" onclick="selectTheme(1)" title="Design 1: Spring Pastel">
+                <div class="step3-theme-icon-box">🌸</div>
+                <div class="step3-theme-text">
+                  <span class="step3-theme-name">Spring Pastel</span>
+                </div>
+              </button>
+
+              <button type="button" class="step3-theme-btn" id="step3-theme-chip-2" onclick="selectTheme(2)" title="Design 2: Watercolor Eggs">
+                <div class="step3-theme-icon-box">🥚</div>
+                <div class="step3-theme-text">
+                  <span class="step3-theme-name">Watercolor Eggs</span>
+                </div>
+              </button>
+
+              <button type="button" class="step3-theme-btn" id="step3-theme-chip-3" onclick="selectTheme(3)" title="Design 3: Pastel Stripes">
+                <div class="step3-theme-icon-box">🍭</div>
+                <div class="step3-theme-text">
+                  <span class="step3-theme-name">Pastel Stripes</span>
+                </div>
+              </button>
+
+              <button type="button" class="step3-theme-btn" id="step3-theme-chip-4" onclick="selectTheme(4)" title="Design 4: Easter Variety Collection">
+                <div class="step3-theme-icon-box">🥕</div>
+                <div class="step3-theme-text">
+                  <span class="step3-theme-name">Easter Variety</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Live Answer Customizer -->
+          <div class="step3-deck-card" id="step3-location-card">
+            <div class="step3-input-header">
+              <span class="deck-tag" id="preview-clue-label">Answer #1:</span>
+            </div>
+            <div class="step3-input-box-wrap">
+              <span class="step3-input-icon">✏️</span>
+              <input
+                type="text"
+                id="preview-clue-input"
+                class="deck-text-input"
+                placeholder="Type answer..."
+                value="Bookshelf"
+                maxlength="10"
+                oninput="handleLiveSpotInput(this.value)"
+                onkeydown="handleLocationKeydown(event, getMaxLocationLength(currentPreviewClue), document.getElementById('preview-clue-limit-badge'))"
+                onblur="hideLimitNotice(document.getElementById('preview-clue-limit-badge'), this)"
+              >
+              <span id="preview-clue-limit-badge" class="limit-notice-badge"></span>
+            </div>
+          </div>
+
+          <!-- 3. Preview Mode Switch -->
+          <div class="step3-deck-card" id="step3-mode-card">
+            <div class="deck-card-header">
+              <span class="deck-tag">View Mode</span>
+            </div>
+            <div class="deck-mode-switch">
+              <button type="button" class="preview-mode-btn active" id="btn-mode-game" onclick="setCluePreviewMode('game')">
+                🎮 Game Card
+              </button>
+              <button type="button" class="preview-mode-btn" id="btn-mode-answer" onclick="setCluePreviewMode('answer')">
+                🔑 Solved Answer Key
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. Action Buttons -->
+          <div class="deck-actions-card" id="step3-actions-card">
+            <button type="button" class="btn-secondary deck-action-btn" onclick="goBackToStep1()" title="Back to Select Hiding Spots">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L6.414 9H16a1 1 0 110 2H6.414l3.293 3.293a1 1 0 010 1.414z" clip-rule="evenodd"/>
+              </svg>
+              <span class="deck-btn-text-full">Back: Hiding Spots</span>
+              <span class="deck-btn-text-short">Back</span>
+            </button>
+            <button type="button" class="btn-primary deck-action-btn" onclick="proceedToStep3()" title="Next: Download Clues">
+              <span class="deck-btn-text-full">Next: Download</span>
+              <span class="deck-btn-text-short">Download</span>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Clue Card Stage Column (Right) -->
+        <div class="step3-card-column">
+          <div class="step3-deck-card clue-nav-card" id="step3-clue-nav-card">
+            <div class="clue-nav-bar-row">
+              <button type="button" class="preview-stage-nav-btn" id="btn-prev-clue" onclick="navigateCluePreview(-1)" title="Previous Clue (← Left Arrow)">
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+                <span>Previous</span>
+              </button>
+              <div class="clue-nav-indicator">
+                <span class="clue-nav-num" id="clue-stepper-title">Clue 1 of 24</span>
+              </div>
+              <button type="button" class="preview-stage-nav-btn" id="btn-next-clue" onclick="navigateCluePreview(1)" title="Next Clue (Right Arrow →)">
+                <span>Next</span>
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="step3-studio-mat">
+            <div class="clue-card-stage-wrap" id="clue-card-stage-wrap">
+              <div class="clue-card-paper" id="clue-preview-card-paper">
+                <div class="clue-card-bg-border" id="clue-preview-border-container"></div>
+                <div id="clue-preview-content-root" style="position:absolute; inset:0; width:100%; height:100%; z-index:5;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- STEP 3: DOWNLOAD -->
+    <main class="step-panel" id="panel-step-3" style="display:none;">
+      <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <h2><span class="panel-step-label">Step 3:</span> Download</h2>
+      </div>
+
+      <div class="print-options-grid">
+        <div class="print-layout-card selected" id="layout-card-portrait" onclick="selectPrintLayout('portrait')">
+          <div class="print-diagram-box">
+            <div class="diagram-sheet-portrait">
+              <div class="diagram-border-sample"></div>
+              <div class="diagram-card-content">
+                <span class="diagram-pill-badge">CLUE #1</span>
+                <div class="diagram-mock-riddle">
+                  <div class="mock-line" style="width: 84%;"></div>
+                  <div class="mock-line" style="width: 96%;"></div>
+                  <div class="mock-line" style="width: 70%;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="theme-info" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div class="theme-title-row" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <span class="theme-title" style="font-size: 1.18rem; font-weight: 700;">1 Clue Per Page</span>
+                <span class="sheet-count-pill" id="sheet-count-portrait">24 Sheets</span>
+              </div>
+              <p class="theme-desc" style="margin: 0 0 8px; font-size: 0.9rem; color: #64748b;">Full page</p>
+            </div>
+            <div class="card-footer" style="margin-top: auto; padding-top: 8px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end;">
+              <span class="select-indicator" id="layout-indicator-portrait">✓ Selected</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="print-layout-card" id="layout-card-landscape" onclick="selectPrintLayout('landscape')">
+          <div class="print-diagram-box">
+            <div class="diagram-sheet-landscape">
+              <div class="diagram-landscape-half">
+                <div class="diagram-card-content">
+                  <span class="diagram-pill-badge small">CLUE #1</span>
+                  <div class="diagram-mock-riddle small">
+                    <div class="mock-line" style="width: 82%;"></div>
+                    <div class="mock-line" style="width: 95%;"></div>
+                    <div class="mock-line" style="width: 68%;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="diagram-landscape-half">
+                <div class="diagram-card-content">
+                  <span class="diagram-pill-badge small">CLUE #2</span>
+                  <div class="diagram-mock-riddle small">
+                    <div class="mock-line" style="width: 82%;"></div>
+                    <div class="mock-line" style="width: 95%;"></div>
+                    <div class="mock-line" style="width: 68%;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="diagram-cut-line"></div>
+              <div class="diagram-cut-badge">✂ CUT HERE</div>
+            </div>
+          </div>
+          <div class="theme-info" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div class="theme-title-row" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <span class="theme-title" style="font-size: 1.18rem; font-weight: 700;">2 Clues Per Page</span>
+                <span class="sheet-count-pill" id="sheet-count-landscape">12 Sheets</span>
+              </div>
+              <p class="theme-desc" style="margin: 0 0 8px; font-size: 0.9rem; color: #64748b;">2 cards per page</p>
+            </div>
+            <div class="card-footer" style="margin-top: auto; padding-top: 8px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end;">
+              <span class="select-indicator" id="layout-indicator-landscape">Select</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="print-instructions-box copyright-notice-box">
+        <div class="print-instructions-icon">🔒</div>
+        <div>
+          <div class="print-instructions-title">Copyright</div>
+          <div class="print-instructions-desc" style="font-size: 0.88rem; line-height: 1.5; color: #475569;">
+            This design, printable game, and web application are copyrighted. Your purchase of this product is for personal use only. Commercial or public use of any kind is strictly prohibited. Reselling, sharing, reproducing, or distributing this product or it's result, either in part or in full, with or without modifications, is prohibited.
+          </div>
+        </div>
+      </div>
+
+      <div class="action-bar step3-action-bar">
+        <button type="button" class="btn-secondary" onclick="goBackToStep2()">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L6.414 9H16a1 1 0 110 2H6.414l3.293 3.293a1 1 0 010 1.414z" clip-rule="evenodd"/>
+          </svg>
+          <span>Back: Choose a Design</span>
+        </button>
+        <div class="step3-download-btns-wrap">
+          <button type="button" class="btn-answer-key" id="btn-download-answer" onclick="triggerDownloadAndPrint('answer')" title="Download clue cards with solved answers">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Download Answer Key</span>
+          </button>
+          <button type="button" class="btn-primary" id="btn-download-print" onclick="triggerDownloadAndPrint('game')" title="Download game clue cards for players">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Download Clue Cards</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    </div><!-- /.app-main -->
+  </div><!-- /.app-layout -->
+
+  <div id="print-sheet-root"></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
