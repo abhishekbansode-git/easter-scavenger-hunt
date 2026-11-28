@@ -831,19 +831,48 @@ function navigateToStep(stepNum) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+const STEP2_CHUNK_SIZE = 6;
+const STEP3_FIRST_CLUE_CHUNK = 4; // 2 intro sheets + 4 clues = 6 cards max
+const STEP3_CLUE_CHUNK_SIZE = 6;  // 6 cards max per request, always even for 2-up landscape pairing
+
 function getStep2CacheKey(themeId = AppState.selectedTheme, mode = cluePreviewMode) {
   return `${themeId || 1}:${mode || 'game'}`;
 }
 
 function storeStep2BatchPreviews(themeId, mode, previews) {
   if (!Array.isArray(previews)) return;
-  const map = new Map();
+  const key = getStep2CacheKey(themeId, mode);
+  const map = step2PreviewCache.get(key) || new Map();
   previews.forEach(item => {
     if (item && typeof item.clueNum === 'number') {
       map.set(item.clueNum, item);
     }
   });
-  step2PreviewCache.set(getStep2CacheKey(themeId, mode), map);
+  step2PreviewCache.set(key, map);
+}
+
+function getCachedStep2Preview(themeId, mode, clueNum) {
+  const map = step2PreviewCache.get(getStep2CacheKey(themeId, mode));
+  return map ? (map.get(clueNum) || null) : null;
+}
+
+async function fetchStep2Chunk(targetTheme, targetMode, targetClueNum) {
+  const chunkStart = Math.floor(Math.max(0, targetClueNum - 1) / STEP2_CHUNK_SIZE) * STEP2_CHUNK_SIZE;
+  const data = await apiRequest('/api/map-and-preview', {
+    method: 'POST',
+    body: JSON.stringify({
+      clues: huntClues,
+      inStep2Or3: true,
+      includeBatchPreview: true,
+      batchStart: chunkStart,
+      batchLimit: STEP2_CHUNK_SIZE,
+      previewClueNum: targetClueNum,
+      themeId: targetTheme,
+      mode: targetMode,
+      assetBaseUrl: getAssetBaseUrl()
+    })
+  });
+  return data;
 }
 
 async function proceedToStep2() {
@@ -875,20 +904,9 @@ async function proceedToStep2() {
 
   const targetTheme = AppState.selectedTheme || 1;
   const targetMode = cluePreviewMode || 'game';
-  if (!step2PreviewCache.has(getStep2CacheKey(targetTheme, targetMode))) {
+  if (!getCachedStep2Preview(targetTheme, targetMode, currentPreviewClue)) {
     try {
-      const data = await apiRequest('/api/map-and-preview', {
-        method: 'POST',
-        body: JSON.stringify({
-          clues: huntClues,
-          inStep2Or3: true,
-          includeBatchPreview: true,
-          previewClueNum: currentPreviewClue,
-          themeId: targetTheme,
-          mode: targetMode,
-          assetBaseUrl: getAssetBaseUrl()
-        })
-      });
+      const data = await fetchStep2Chunk(targetTheme, targetMode, currentPreviewClue);
       mergeBackendCluesPreservingFocused(data.clues, -1);
       storeStep2BatchPreviews(targetTheme, targetMode, data.previews);
     } catch (err) {
@@ -1154,9 +1172,10 @@ async function renderCurrentCluePreview() {
 
   const targetTheme = AppState.selectedTheme || 1;
   const targetMode = cluePreviewMode || 'game';
-  const cacheKey = getStep2CacheKey(targetTheme, targetMode);
-  const cachedMap = !livePreviewDebounceTimer ? step2PreviewCache.get(cacheKey) : null;
-  const cached = cachedMap ? cachedMap.get(currentPreviewClue) : null;
+  const targetClueNum = currentPreviewClue;
+  const cached = !livePreviewDebounceTimer
+    ? getCachedStep2Preview(targetTheme, targetMode, targetClueNum)
+    : null;
 
   if (cached) {
     if (borderContainer) {
@@ -1168,25 +1187,14 @@ async function renderCurrentCluePreview() {
 
   const reqId = ++previewRequestSeq;
   try {
-    const data = await apiRequest('/api/map-and-preview', {
-      method: 'POST',
-      body: JSON.stringify({
-        clues: huntClues,
-        inStep2Or3: true,
-        includeBatchPreview: true,
-        previewClueNum: currentPreviewClue,
-        themeId: targetTheme,
-        mode: targetMode,
-        assetBaseUrl: getAssetBaseUrl()
-      })
-    });
+    const data = await fetchStep2Chunk(targetTheme, targetMode, targetClueNum);
     if (reqId !== previewRequestSeq) return;
 
     mergeBackendCluesPreservingFocused(data.clues, -1);
     storeStep2BatchPreviews(targetTheme, targetMode, data.previews);
 
     const rendered = (Array.isArray(data.previews)
-      ? data.previews.find(p => p.clueNum === currentPreviewClue)
+      ? data.previews.find(p => p.clueNum === targetClueNum)
       : null) || data.preview;
 
     if (rendered) {
@@ -1310,21 +1318,42 @@ async function warmupPrintDocument(targetMode = 'game') {
   }
 
   const requestTask = (async () => {
-    const data = await apiRequest('/api/render-print', {
-      method: 'POST',
-      body: JSON.stringify({
-        clues: huntClues,
-        inStep2Or3: true,
-        themeId: currentTheme,
-        layout: currentLayout,
-        paperSize: currentPaper,
-        mode: targetMode,
-        assetBaseUrl: getAssetBaseUrl()
-      })
+    const totalClues = activeClues.length;
+    const chunks = [];
+    chunks.push({
+      clueStart: 0,
+      clueCount: Math.min(STEP3_FIRST_CLUE_CHUNK, totalClues),
+      includeIntro: true
     });
+    for (let start = STEP3_FIRST_CLUE_CHUNK; start < totalClues; start += STEP3_CLUE_CHUNK_SIZE) {
+      chunks.push({
+        clueStart: start,
+        clueCount: Math.min(STEP3_CLUE_CHUNK_SIZE, totalClues - start),
+        includeIntro: false
+      });
+    }
 
-    const rootClassName = data.rootClassName || `print-root layout-${currentLayout} paper-${currentPaper}`;
-    const html = data.html || '';
+    const chunkResponses = await Promise.all(chunks.map(chunk =>
+      apiRequest('/api/render-print', {
+        method: 'POST',
+        body: JSON.stringify({
+          clues: huntClues,
+          inStep2Or3: true,
+          themeId: currentTheme,
+          layout: currentLayout,
+          paperSize: currentPaper,
+          mode: targetMode,
+          assetBaseUrl: getAssetBaseUrl(),
+          clueStart: chunk.clueStart,
+          clueCount: chunk.clueCount,
+          includeIntro: chunk.includeIntro
+        })
+      })
+    ));
+
+    const firstResp = chunkResponses[0] || {};
+    const rootClassName = firstResp.rootClassName || `print-root layout-${currentLayout} paper-${currentPaper}`;
+    const html = chunkResponses.map(r => r.html || '').join('');
     printDocCache.set(printCacheKey, { rootClassName, html });
 
     const root = document.getElementById('print-sheet-root');
