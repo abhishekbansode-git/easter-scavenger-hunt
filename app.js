@@ -25,6 +25,18 @@ let livePreviewDebounceTimer = null;
 let mappingRequestSeq = 0;
 let previewRequestSeq = 0;
 let activePrintPromise = null;
+let backendSlotLimits = null;
+const step2PreviewCache = new Map();
+const printDocCache = new Map();
+
+function invalidateAllContentCaches() {
+  step2PreviewCache.clear();
+  printDocCache.clear();
+  if (typeof printWarmState !== 'undefined') {
+    printWarmState.isWarmed = false;
+  }
+  activePrintPromise = null;
+}
 
 function getApiBaseUrl() {
   const raw = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'http://127.0.0.1:8787';
@@ -39,12 +51,17 @@ function getAssetBaseUrl() {
 
 async function apiRequest(path, options = {}) {
   const url = `${getApiBaseUrl()}${path}`;
+  const method = (options.method || 'GET').toUpperCase();
+  const headers = { ...(options.headers || {}) };
+  if (options.body !== undefined || (method !== 'GET' && method !== 'HEAD')) {
+    if (!headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+  }
   const res = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
+    method,
+    headers
   });
   if (!res.ok) {
     let message = `API error (${res.status})`;
@@ -100,6 +117,10 @@ function selectTheme(themeId) {
   if (stageThemeBadge) stageThemeBadge.textContent = shortNames[themeId] || shortNames[1];
 
   if (currentActiveStep === 2) {
+    if (livePreviewDebounceTimer) {
+      clearTimeout(livePreviewDebounceTimer);
+      livePreviewDebounceTimer = null;
+    }
     renderCurrentCluePreview();
   }
   invalidatePrintWarmup();
@@ -215,7 +236,140 @@ function mergeBackendCluesPreservingFocused(backendClues, focusedIndex = -1) {
   });
 }
 
+function isFeasibleCapacityList(wordsLens, poolLens) {
+  const wSorted = [...wordsLens].sort((a, b) => b - a);
+  const pSorted = [...poolLens].sort((a, b) => b - a);
+  if (wSorted.length > pSorted.length) return false;
+  for (let i = 0; i < wSorted.length; i++) {
+    if (pSorted[i] < wSorted[i]) return false;
+  }
+  return true;
+}
+
+function findMatchingStaticRule(availStatic, upperLoc) {
+  if (!upperLoc || !Array.isArray(availStatic)) return -1;
+  return availStatic.findIndex(rule => Array.isArray(rule.keys) && rule.keys.includes(upperLoc));
+}
+
+/**
+ * Mirrors backend capacity & static-slot matching locally in Step 1 using
+ * only the plain limit numbers/keywords returned by /api/init (0 API calls).
+ */
+function recomputeLocalStep1Capacities(focusedIndex = -1) {
+  if (!backendSlotLimits || !Array.isArray(huntClues) || !huntClues.length) return;
+
+  const activeClues = huntClues.filter(c => !c.disabled);
+  if (!activeClues.length) return;
+
+  const availDynamic = [...(backendSlotLimits.dynamicPool || [])].sort((a, b) => a - b);
+  const availStatic = (backendSlotLimits.staticRules || []).map(r => ({
+    keys: r.keys || [],
+    maxLen: r.maxLen || 15
+  }));
+  const assigned = new Map();
+
+  // Pass 1: exact static location match
+  activeClues.forEach(c => {
+    const cleanLoc = (c.location || '').trim().toUpperCase();
+    if (!cleanLoc) return;
+    const sIdx = findMatchingStaticRule(availStatic, cleanLoc);
+    if (sIdx !== -1) {
+      assigned.set(c, { maxLen: availStatic[sIdx].maxLen, isStatic: true });
+      c.isStatic = true;
+      availStatic.splice(sIdx, 1);
+    } else {
+      c.isStatic = false;
+    }
+  });
+
+  // Pass 2: assign remaining dynamic slots shortest -> longest
+  const wordsInfo = [];
+  activeClues.forEach(c => {
+    if (assigned.has(c)) return;
+    const wlen = getLetterCount(c.location);
+    if (wlen > 0) {
+      wordsInfo.push({ clue: c, len: wlen, origIndex: huntClues.indexOf(c) });
+    }
+  });
+  wordsInfo.sort((a, b) => a.len - b.len || a.origIndex - b.origIndex);
+
+  wordsInfo.forEach(item => {
+    if (!availDynamic.length) return;
+    let chosenIdx = availDynamic.findIndex(cap => cap >= item.len);
+    if (chosenIdx === -1) chosenIdx = availDynamic.length - 1;
+    assigned.set(item.clue, { maxLen: availDynamic[chosenIdx], isStatic: false });
+    availDynamic.splice(chosenIdx, 1);
+  });
+
+  // Pass 3: empty slots take remaining dynamic (or static fallback)
+  activeClues.forEach(c => {
+    if (assigned.has(c)) return;
+    if (availDynamic.length > 0) {
+      assigned.set(c, { maxLen: availDynamic.shift(), isStatic: false });
+    } else if (availStatic.length > 0) {
+      const sp = availStatic.shift();
+      assigned.set(c, { maxLen: sp.maxLen, isStatic: true });
+    }
+  });
+
+  activeClues.forEach(c => {
+    const info = assigned.get(c);
+    if (info) {
+      c.maxLen = info.maxLen;
+      c.isStatic = !!info.isStatic;
+    }
+  });
+
+  // Compute remaining maxCap for each slot matching backend getMaxAvailableCapacityForSpot
+  const sortedPool = [...(backendSlotLimits.dynamicPool || [])].sort((a, b) => b - a);
+  huntClues.forEach((c, slotIndex) => {
+    if (c.disabled) {
+      c.maxCap = c.maxLen || 15;
+      return;
+    }
+    const cleanLoc = (c.location || '').trim().toUpperCase();
+    const staticRule = (backendSlotLimits.staticRules || []).find(r => r.keys && r.keys.includes(cleanLoc));
+    if (staticRule) {
+      c.maxCap = staticRule.maxLen;
+      return;
+    }
+
+    const otherWords = [];
+    activeClues.forEach(other => {
+      if (huntClues.indexOf(other) === slotIndex) return;
+      const loc = (other.location || '').trim();
+      if (!loc) return;
+      const up = loc.toUpperCase();
+      if ((backendSlotLimits.staticRules || []).some(r => r.keys && r.keys.includes(up))) return;
+      const ll = getLetterCount(loc);
+      if (ll > 0) otherWords.push(ll);
+    });
+
+    let computedMaxCap = 15;
+    for (let i = 0; i < sortedPool.length; i++) {
+      const candLen = sortedPool[i];
+      const poolAfter = [...(backendSlotLimits.dynamicPool || [])];
+      const remIdx = poolAfter.indexOf(candLen);
+      if (remIdx !== -1) poolAfter.splice(remIdx, 1);
+      if (isFeasibleCapacityList(otherWords, poolAfter)) {
+        computedMaxCap = candLen;
+        break;
+      }
+    }
+    c.maxCap = computedMaxCap;
+    if (slotIndex !== focusedIndex && !c.isStatic && getLetterCount(c.location) > c.maxCap) {
+      c.location = limitToMaxLetters(c.location, c.maxCap);
+    }
+  });
+}
+
 async function syncMappingWithBackend(focusedIndex = -1) {
+  if (backendSlotLimits) {
+    recomputeLocalStep1Capacities(focusedIndex);
+    updateSpotsListDOMInPlace(focusedIndex);
+    syncHidingSpots();
+    return;
+  }
   const reqId = ++mappingRequestSeq;
   try {
     const data = await apiRequest('/api/map-and-preview', {
@@ -238,6 +392,11 @@ async function syncMappingWithBackend(focusedIndex = -1) {
 }
 
 function scheduleMappingSync(focusedIndex = -1, delayMs = 220) {
+  if (backendSlotLimits) {
+    recomputeLocalStep1Capacities(focusedIndex);
+    updateSpotsListDOMInPlace(focusedIndex);
+    return;
+  }
   if (mappingDebounceTimer) clearTimeout(mappingDebounceTimer);
   mappingDebounceTimer = setTimeout(() => {
     syncMappingWithBackend(focusedIndex);
@@ -303,6 +462,8 @@ async function resetDefaultSpots() {
   try {
     const data = await apiRequest('/api/init');
     huntClues = Array.isArray(data.clues) ? data.clues : [];
+    if (data.slotLimits) backendSlotLimits = data.slotLimits;
+    invalidateAllContentCaches();
     syncHidingSpots();
     renderSpotsList();
     currentPreviewClue = 1;
@@ -322,6 +483,8 @@ function clearAllSpots() {
     item.placeholder = `Location #${i + 1}`;
     item.selectedForHunt = false;
   });
+  invalidateAllContentCaches();
+  recomputeLocalStep1Capacities(-1);
   syncHidingSpots();
   renderSpotsList();
   currentPreviewClue = 1;
@@ -517,6 +680,8 @@ function renderSpotsList() {
 function clearSpotLocation(index) {
   if (!huntClues[index]) return;
   huntClues[index].location = '';
+  invalidateAllContentCaches();
+  recomputeLocalStep1Capacities(-1);
   syncHidingSpots();
   renderSpotsList();
   scheduleMappingSync(-1, 50);
@@ -550,6 +715,8 @@ function updateSpot(index, value) {
   }
 
   item.location = value;
+  invalidateAllContentCaches();
+  recomputeLocalStep1Capacities(index);
   updateSpotsListDOMInPlace(index);
   syncHidingSpots();
 
@@ -564,7 +731,7 @@ function updateSpot(index, value) {
   scheduleMappingSync(index, 220);
 
   if (currentActiveStep === 2) {
-    scheduleLivePreviewRender(220);
+    scheduleLivePreviewRender(550);
   }
 }
 
@@ -574,6 +741,8 @@ function moveSpot(index, delta) {
   if (target < 0 || target >= huntClues.length || (huntClues[target] && huntClues[target].disabled)) return;
   const item = huntClues.splice(index, 1)[0];
   huntClues.splice(target, 0, item);
+  invalidateAllContentCaches();
+  recomputeLocalStep1Capacities(-1);
   syncHidingSpots();
   renderSpotsList();
   scheduleMappingSync(-1, 50);
@@ -611,6 +780,8 @@ function handleDrop(e, targetIndex) {
   const item = huntClues.splice(draggedIndex, 1)[0];
   huntClues.splice(targetIndex, 0, item);
   draggedIndex = null;
+  invalidateAllContentCaches();
+  recomputeLocalStep1Capacities(-1);
   syncHidingSpots();
   renderSpotsList();
   scheduleMappingSync(-1, 50);
@@ -649,7 +820,6 @@ function navigateToStep(stepNum) {
   }
   if (stepNum === 3) {
     updateStep3SheetCounts();
-    warmupPrintDocument('game');
   }
 
   document.querySelectorAll('.step-item').forEach((el, i) => {
@@ -659,6 +829,21 @@ function navigateToStep(stepNum) {
     else if (num === stepNum) el.classList.add('active');
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function getStep2CacheKey(themeId = AppState.selectedTheme, mode = cluePreviewMode) {
+  return `${themeId || 1}:${mode || 'game'}`;
+}
+
+function storeStep2BatchPreviews(themeId, mode, previews) {
+  if (!Array.isArray(previews)) return;
+  const map = new Map();
+  previews.forEach(item => {
+    if (item && typeof item.clueNum === 'number') {
+      map.set(item.clueNum, item);
+    }
+  });
+  step2PreviewCache.set(getStep2CacheKey(themeId, mode), map);
 }
 
 async function proceedToStep2() {
@@ -683,22 +868,32 @@ async function proceedToStep2() {
     currentPreviewClue = 1;
   }
 
-  if (mappingDebounceTimer) clearTimeout(mappingDebounceTimer);
-  try {
-    const data = await apiRequest('/api/map-and-preview', {
-      method: 'POST',
-      body: JSON.stringify({
-        clues: huntClues,
-        inStep2Or3: true,
-        previewClueNum: currentPreviewClue,
-        themeId: AppState.selectedTheme,
-        mode: cluePreviewMode,
-        assetBaseUrl: getAssetBaseUrl()
-      })
-    });
-    mergeBackendCluesPreservingFocused(data.clues, -1);
-  } catch (err) {
-    showMappingToast(`Backend API error: ${err.message}`);
+  if (mappingDebounceTimer) {
+    clearTimeout(mappingDebounceTimer);
+    mappingDebounceTimer = null;
+  }
+
+  const targetTheme = AppState.selectedTheme || 1;
+  const targetMode = cluePreviewMode || 'game';
+  if (!step2PreviewCache.has(getStep2CacheKey(targetTheme, targetMode))) {
+    try {
+      const data = await apiRequest('/api/map-and-preview', {
+        method: 'POST',
+        body: JSON.stringify({
+          clues: huntClues,
+          inStep2Or3: true,
+          includeBatchPreview: true,
+          previewClueNum: currentPreviewClue,
+          themeId: targetTheme,
+          mode: targetMode,
+          assetBaseUrl: getAssetBaseUrl()
+        })
+      });
+      mergeBackendCluesPreservingFocused(data.clues, -1);
+      storeStep2BatchPreviews(targetTheme, targetMode, data.previews);
+    } catch (err) {
+      showMappingToast(`Backend API error: ${err.message}`);
+    }
   }
 
   navigateToStep(2);
@@ -753,6 +948,10 @@ function navigateCluePreview(delta) {
 }
 
 function switchCluePreview(clueNum) {
+  if (livePreviewDebounceTimer) {
+    clearTimeout(livePreviewDebounceTimer);
+    livePreviewDebounceTimer = null;
+  }
   const total = getTotalCluesCount();
   if (clueNum < 1) clueNum = 1;
   if (clueNum > total) clueNum = total;
@@ -878,6 +1077,10 @@ window.addEventListener('keydown', (e) => {
 });
 
 function setCluePreviewMode(mode) {
+  if (livePreviewDebounceTimer) {
+    clearTimeout(livePreviewDebounceTimer);
+    livePreviewDebounceTimer = null;
+  }
   cluePreviewMode = mode;
   const btnGame = document.getElementById('btn-mode-game');
   const btnAns = document.getElementById('btn-mode-answer');
@@ -911,6 +1114,8 @@ function handleLiveSpotInput(val) {
       if (step1Input) step1Input.value = val;
     }
   }
+  invalidateAllContentCaches();
+  recomputeLocalStep1Capacities(-1);
   syncHidingSpots();
   updatePreviewLimitNotice(val, maxLen, wasTruncated);
 
@@ -920,7 +1125,7 @@ function handleLiveSpotInput(val) {
     charBadge.textContent = `${curLetters} / ${maxLen} letters`;
     charBadge.classList.toggle('warning', curLetters >= maxLen);
   }
-  scheduleLivePreviewRender(200);
+  scheduleLivePreviewRender(550);
 }
 
 function updatePreviewLimitNotice(val, maxLen, wasTruncated = false) {
@@ -934,9 +1139,10 @@ function updatePreviewLimitNotice(val, maxLen, wasTruncated = false) {
   }
 }
 
-function scheduleLivePreviewRender(delayMs = 200) {
+function scheduleLivePreviewRender(delayMs = 550) {
   if (livePreviewDebounceTimer) clearTimeout(livePreviewDebounceTimer);
   livePreviewDebounceTimer = setTimeout(() => {
+    livePreviewDebounceTimer = null;
     renderCurrentCluePreview();
   }, delayMs);
 }
@@ -946,6 +1152,20 @@ async function renderCurrentCluePreview() {
   const root = document.getElementById('clue-preview-content-root');
   if (!root) return;
 
+  const targetTheme = AppState.selectedTheme || 1;
+  const targetMode = cluePreviewMode || 'game';
+  const cacheKey = getStep2CacheKey(targetTheme, targetMode);
+  const cachedMap = !livePreviewDebounceTimer ? step2PreviewCache.get(cacheKey) : null;
+  const cached = cachedMap ? cachedMap.get(currentPreviewClue) : null;
+
+  if (cached) {
+    if (borderContainer) {
+      borderContainer.innerHTML = cached.borderHtml || '';
+    }
+    root.innerHTML = cached.cardHtml || '';
+    return;
+  }
+
   const reqId = ++previewRequestSeq;
   try {
     const data = await apiRequest('/api/map-and-preview', {
@@ -953,21 +1173,27 @@ async function renderCurrentCluePreview() {
       body: JSON.stringify({
         clues: huntClues,
         inStep2Or3: true,
+        includeBatchPreview: true,
         previewClueNum: currentPreviewClue,
-        themeId: AppState.selectedTheme,
-        mode: cluePreviewMode,
+        themeId: targetTheme,
+        mode: targetMode,
         assetBaseUrl: getAssetBaseUrl()
       })
     });
     if (reqId !== previewRequestSeq) return;
 
     mergeBackendCluesPreservingFocused(data.clues, -1);
+    storeStep2BatchPreviews(targetTheme, targetMode, data.previews);
 
-    if (data.preview) {
+    const rendered = (Array.isArray(data.previews)
+      ? data.previews.find(p => p.clueNum === currentPreviewClue)
+      : null) || data.preview;
+
+    if (rendered) {
       if (borderContainer) {
-        borderContainer.innerHTML = data.preview.borderHtml || '';
+        borderContainer.innerHTML = rendered.borderHtml || '';
       }
-      root.innerHTML = data.preview.cardHtml || '';
+      root.innerHTML = rendered.cardHtml || '';
     }
   } catch (err) {
     if (reqId !== previewRequestSeq) return;
@@ -986,7 +1212,6 @@ function selectPaperSize(size) {
   if (btnA4) btnA4.classList.toggle('active', size === 'a4');
   if (btnLetter) btnLetter.classList.toggle('active', size === 'letter');
   updatePrintPageStyle();
-  warmupPrintDocument(printWarmState.mode || 'game');
 }
 
 function selectPrintLayout(layout) {
@@ -1001,7 +1226,6 @@ function selectPrintLayout(layout) {
   if (portInd) portInd.textContent = (layout === 'portrait') ? '✓ Selected' : 'Select';
   if (landInd) landInd.textContent = (layout === 'landscape') ? '✓ Selected' : 'Select';
   updatePrintPageStyle();
-  warmupPrintDocument(printWarmState.mode || 'game');
 }
 
 function updatePrintPageStyle() {
@@ -1029,9 +1253,7 @@ function invalidatePrintWarmup() {
   printWarmState.isWarmed = false;
   activePrintPromise = null;
   const step3 = document.getElementById('panel-step-3');
-  if (step3 && step3.style.display !== 'none') {
-    warmupPrintDocument(printWarmState.mode || 'game');
-  } else {
+  if (!step3 || step3.style.display === 'none') {
     const root = document.getElementById('print-sheet-root');
     if (root) root.innerHTML = '';
   }
@@ -1067,6 +1289,26 @@ async function warmupPrintDocument(targetMode = 'game') {
 
   updatePrintPageStyle();
 
+  const printCacheKey = `${targetMode}:${currentLayout}:${currentPaper}:${currentTheme}:${activeClues.length}`;
+  const cachedDoc = printDocCache.get(printCacheKey);
+  if (cachedDoc) {
+    const root = document.getElementById('print-sheet-root');
+    if (root) {
+      root.className = cachedDoc.rootClassName || `print-root layout-${currentLayout} paper-${currentPaper}`;
+      root.innerHTML = cachedDoc.html || '';
+      await waitForPrintImages(root);
+    }
+    printWarmState = {
+      isWarmed: true,
+      mode: targetMode,
+      layout: currentLayout,
+      paper: currentPaper,
+      theme: currentTheme,
+      cluesCount: activeClues.length
+    };
+    return;
+  }
+
   const requestTask = (async () => {
     const data = await apiRequest('/api/render-print', {
       method: 'POST',
@@ -1081,10 +1323,14 @@ async function warmupPrintDocument(targetMode = 'game') {
       })
     });
 
+    const rootClassName = data.rootClassName || `print-root layout-${currentLayout} paper-${currentPaper}`;
+    const html = data.html || '';
+    printDocCache.set(printCacheKey, { rootClassName, html });
+
     const root = document.getElementById('print-sheet-root');
     if (root) {
-      root.className = data.rootClassName || `print-root layout-${currentLayout} paper-${currentPaper}`;
-      root.innerHTML = data.html || '';
+      root.className = rootClassName;
+      root.innerHTML = html;
       await waitForPrintImages(root);
     }
 
@@ -1254,6 +1500,8 @@ async function initializeHuntApp() {
   try {
     const data = await apiRequest('/api/init');
     huntClues = Array.isArray(data.clues) ? data.clues : [];
+    if (data.slotLimits) backendSlotLimits = data.slotLimits;
+    invalidateAllContentCaches();
     syncHidingSpots();
     renderSpotsList();
   } catch (err) {
